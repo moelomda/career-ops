@@ -11,8 +11,9 @@
 
 import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { fileURLToPath } from 'url';
 
-const CAREER_OPS = new URL('.', import.meta.url).pathname;
+const CAREER_OPS = fileURLToPath(new URL('.', import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
 const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
   ? join(CAREER_OPS, 'data/applications.md')
@@ -22,9 +23,19 @@ const DRY_RUN = process.argv.includes('--dry-run');
 // Status advancement order (higher = more advanced in pipeline)
 // Aplicado > Rechazado because active application > terminal state
 const STATUS_RANK = {
-  'no aplicar': 0,
-  'descartado': 0,
-  'rechazado': 1,  // Terminal — below active states
+  // English canonicals (states.yml labels)
+  'skip': 0,
+  'discarded': 0,
+  'rejected': 1,
+  'evaluated': 2,
+  'applied': 3,
+  'responded': 4,
+  'interview': 5,
+  'offer': 6,
+  // Spanish aliases — kept for backwards compat with existing tracker data
+  'no aplicar': 0, 'no_aplicar': 0,
+  'descartado': 0, 'descartada': 0,
+  'rechazado': 1, 'rechazada': 1,
   'evaluada': 2,
   'aplicado': 3,
   'respondido': 4,

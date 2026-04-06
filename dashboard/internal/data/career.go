@@ -537,7 +537,10 @@ func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remot
 
 // UpdateApplicationStatus updates the status of an application in applications.md.
 func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, newStatus string) error {
-	filePath := filepath.Join(careerOpsPath, "applications.md")
+	filePath := filepath.Join(careerOpsPath, "data", "applications.md")
+	if _, statErr := os.Stat(filePath); os.IsNotExist(statErr) {
+		filePath = filepath.Join(careerOpsPath, "applications.md")
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return err
