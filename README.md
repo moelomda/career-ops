@@ -102,6 +102,23 @@ Career-ops is a single slash command with multiple modes:
 
 Or just paste a job URL or description directly -- career-ops auto-detects it and runs the full pipeline.
 
+### Maintenance scripts
+
+The agent runs these for you, but you can also invoke them directly to keep the
+tracker (`data/applications.md`) healthy:
+
+| Command | What it does |
+|---------|--------------|
+| `npm run verify` | Health-check the tracker: canonical statuses, duplicates, broken report links, score format. |
+| `npm run normalize` | Map non-canonical statuses to canonical ones (add `-- --dry-run` to preview). |
+| `npm run dedup` | Remove duplicate company+role entries, keeping the best-scored one. |
+| `npm run merge` | Merge batch results from `batch/tracker-additions/` into the tracker. |
+| `npm run sync-check` | Validate the setup is consistent (cv.md, profile.yml, no stale metrics). |
+| `npm run pdf` | Generate an ATS-optimized CV PDF. |
+| `npm run update:check` / `npm run update` / `npm run rollback` | Check for, apply, or roll back system updates. |
+
+Most write-scripts support `-- --dry-run` to preview changes without touching your files.
+
 ## How It Works
 
 ```
