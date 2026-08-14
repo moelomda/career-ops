@@ -1,8 +1,8 @@
-import fs from "node:fs";
 import path from "node:path";
 import * as yaml from "js-yaml";
 import { careerOpsRoot } from "@/lib/career-ops";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
+import { isMapping, loadProfileDocument, ProfileConfigError } from "@/lib/profile-config.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ type ProfilePatch = {
 };
 
 function isObj(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === "object" && !Array.isArray(v);
+  return isMapping(v);
 }
 
 /** Deep-merge src onto dst (objects recurse; arrays/scalars replace). Non-mutating. */
@@ -67,26 +67,23 @@ export async function POST(req: Request) {
 
   const root = careerOpsRoot();
   const file = path.join(root, "config", "profile.yml");
-  let base: Record<string, unknown> = {};
-  let seeded = false;
+  let base: Record<string, unknown>;
+  let seeded: boolean;
   // DATA-LOSS GUARD (maintainer, bug-class #649/#704/#920/#958): distinguish
   // "no profile yet" (safe to seed from the example) from "profile EXISTS but is
   // malformed" (NEVER overwrite — that would silently destroy the user's data).
-  if (!fs.existsSync(file)) {
-    try {
-      base = (yaml.load(fs.readFileSync(path.join(root, "config", "profile.example.yml"), "utf8")) as Record<string, unknown>) || {};
-      seeded = Object.keys(base).length > 0;
-    } catch {
-      base = {};
-    }
-  } else {
-    let parsed: unknown;
-    try {
-      parsed = yaml.load(fs.readFileSync(file, "utf8"));
-    } catch {
-      return Response.json({ error: "config/profile.yml exists but is not valid YAML — refusing to overwrite it." }, { status: 409 });
-    }
-    base = isObj(parsed) ? (parsed as Record<string, unknown>) : {};
+  try {
+    ({ doc: base, seeded } = loadProfileDocument(
+      file,
+      path.join(root, "config", "profile.example.yml"),
+    ));
+  } catch (error) {
+    const invalidUserConfig = error instanceof ProfileConfigError && error.kind === "invalid-user-config";
+    const message = error instanceof Error ? error.message : "could not load config/profile.yml";
+    return Response.json(
+      { error: invalidUserConfig ? `${message} — refusing to overwrite it.` : message },
+      { status: invalidUserConfig ? 409 : 500 },
+    );
   }
 
   const merged = deepMerge(base, proposed);

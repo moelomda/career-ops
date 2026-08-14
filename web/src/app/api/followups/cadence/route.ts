@@ -5,6 +5,7 @@ import * as yaml from "js-yaml";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
 import { PROFILE_CADENCE_KEYS, type ProfileCadenceKey } from "@/lib/followups";
+import { isMapping, loadProfileDocument, ProfileConfigError } from "@/lib/profile-config.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 // /api/profile guards for the malformed-YAML and first-create cases).
 
 function isObj(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === "object" && !Array.isArray(v);
+  return isMapping(v);
 }
 
 /**
@@ -111,25 +112,19 @@ export async function POST(req: Request) {
 
   const root = careerOpsRoot();
   const file = path.join(root, "config", "profile.yml");
-  let base: Record<string, unknown> = {};
-  if (!fs.existsSync(file)) {
-    // First create: seed from the example so we never leave a cadence-only profile.
-    try {
-      const seeded = yaml.load(fs.readFileSync(path.join(root, "config", "profile.example.yml"), "utf8"));
-      base = isObj(seeded) ? seeded : {};
-    } catch {
-      base = {};
-    }
-  } else {
-    // DATA-LOSS GUARD (mirrors /api/profile): a profile that EXISTS but cannot be
-    // read/parsed must never be overwritten with a cadence-only file.
-    let parsed: unknown;
-    try {
-      parsed = yaml.load(fs.readFileSync(file, "utf8"));
-    } catch {
-      return Response.json({ error: "config/profile.yml exists but could not be read as YAML — refusing to overwrite it." }, { status: 409 });
-    }
-    base = isObj(parsed) ? parsed : {};
+  let base: Record<string, unknown>;
+  try {
+    ({ doc: base } = loadProfileDocument(
+      file,
+      path.join(root, "config", "profile.example.yml"),
+    ));
+  } catch (error) {
+    const invalidUserConfig = error instanceof ProfileConfigError && error.kind === "invalid-user-config";
+    const message = error instanceof Error ? error.message : "could not load config/profile.yml";
+    return Response.json(
+      { error: invalidUserConfig ? `${message} — refusing to overwrite it.` : message },
+      { status: invalidUserConfig ? 409 : 500 },
+    );
   }
 
   const merged = {
