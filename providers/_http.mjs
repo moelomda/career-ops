@@ -85,20 +85,25 @@ export async function fetchJson(url, opts = {}) {
  * @param {string} url
  * @param {{maxBytes?: number}} [opts]
  * @returns {Promise<string>} The first maxBytes of the body, decoded as UTF-8.
+ * A character cut at the limit is decoded with the standard replacement character.
  */
 export async function fetchTextHead(url, opts = {}) {
   const maxBytes = opts.maxBytes ?? 8192;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    throw new RangeError('maxBytes must be a non-negative safe integer');
+  }
   return fetchWithTimeout(url, opts, async (res) => {
     const reader = res.body?.getReader?.();
-    if (!reader) return String(await res.text()).slice(0, maxBytes);
+    if (!reader) return Buffer.from(String(await res.text()), 'utf8').subarray(0, maxBytes).toString('utf8');
     const chunks = [];
     let total = 0;
     try {
       while (total < maxBytes) {
         const { done, value } = await reader.read();
         if (done) break;
-        chunks.push(Buffer.from(value));
-        total += value.length;
+        const bounded = value.subarray(0, maxBytes - total);
+        chunks.push(Buffer.from(bounded));
+        total += bounded.length;
       }
     } finally {
       try {
@@ -106,6 +111,7 @@ export async function fetchTextHead(url, opts = {}) {
       } catch {
         /* body already closed */
       }
+      reader.releaseLock?.();
     }
     return Buffer.concat(chunks).toString('utf8');
   });
